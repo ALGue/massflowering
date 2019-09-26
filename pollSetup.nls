@@ -1,0 +1,55 @@
+globals[ 
+  l ; length of flowering period
+  ;alpha ; flowering concentration parameter
+  beta ; 2nd parameter Beta distribution (alpha = beta)
+  mu ; emergence distribution shape parameter
+  eta ; emergence distribution shape parameter
+  nu ; dispersal parameter
+  ; deltaForagers ; daily forager mortality rate
+  
+  i ; counter for loop
+  
+  ;nbNewBroods
+]
+
+to pollSetup
+  
+  ; parameter initialization
+  set l (s - s1)
+  ;set alpha 10 ; flowering
+  set beta alpha
+  set mu 100 ; emergence
+  set eta (((s - s1) * (mu - 1) / t2) - mu + 2)
+  set nu 0.33 ;0.0625 ; dispersal
+  ; set deltaForagers 0.036 ; daily mortality rate
+  ;set conversionFactor 1
+
+  ; patch initialization for flowering period => NB: put into the landscape intialization step to avoid a "ask patches"
+  ask patches [
+    ; ifelse landCover = 0 [set t round (s1 + (BetaDistrib alpha beta) * (s - s1))][set t round (s1 + (BetaDistrib 1 1) * (s - s1))] ; t between 150 and 180, with a peak if crop, uniform if SNH
+    set t s1
+    set f 0
+    set p 0]
+  
+
+  ; brood initialization
+  set i 0
+  if snh > 0 [
+    if %broods > 0 [
+      loop [
+        set i i + 1
+        ask one-of snhPatches [
+          sprout-broods 1 [
+            ; set emergenceDate round (s1 + (BetaDistrib mu eta) * (s - s1)) ; emergenceDate between 150 and 180
+            set emergenceDate s1                                                               
+            set shape "square"
+            set size 0.5
+            set color 0]
+          set nBroods nBroods + 1]
+        if i = round((1089 - stockCrops) * (%broods / 100)) [stop]]]]
+        ; if i = 1 [stop]]]]
+    
+  
+end
+
+

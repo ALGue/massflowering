@@ -1,0 +1,131 @@
+to cbcGo
+  ;ifelse d < s1 and (count cropPatches with [state = 0] + count cropPatches with [state = 1]) > 0  [ 
+  ifelse d < s1 and (count cropsRequiringCBC with [state = 0] + count cropsRequiringCBC with [state = 1]) > 0  [ 
+    ; between overwintering and back to snh
+    ask adults with [emergenceDate <= d and move? = TRUE][
+      if [landCover] of patch-here = 0 [adultMortality]
+      ifelse timer_move = freq_mov_ad [set timer_move 0 adultMove][set timer_move (timer_move + 1)]]
+    updatePatches
+    pestColonization
+    ask adults with[[state] of patch-here != 2][set move? TRUE]]
+  [
+    ; if time to back snh
+    ask adults with [birthyear = (y - 1)][die]
+    ask adults with [emergenceDate <= d and move? = TRUE][
+      if [landCover] of patch-here = 0 [adultMortality]
+      ifelse timer_move = freq_mov_ad [set timer_move 0 adultBackSNH][set timer_move (timer_move + 1)]]
+    updatePatches
+    ; no pest colonization
+    ask adults with[([landCover] of patch-here = 0 and [state] of patch-here != 2) or ([landCover] of patch-here = 0)][set move? TRUE]]
+end
+
+; initial pest colonisation, for all crops
+;to pestColonization
+;  
+;  ; previous one (pollcbc)
+;  ; let nbCropsColonisedPerTick ceiling (stockCrops * (pcr / 100))
+;  
+;  ; adapted from bc_code
+;  let nbCropsColonisedPerTick floor (pcr / 100 * stockCrops)
+;  
+;  ifelse count cropPatches with [state = 0] > nbCropsColonisedPerTick[
+;    ask n-of nbCropsColonisedPerTick cropPatches with [state = 0] [
+;      set state 1
+;      set d1 d
+;      set pcolor 19]][
+;    ask cropPatches with [state = 0] [
+;      set state 1
+;      set d1 d
+;      set pcolor 19]
+;  ]
+;end
+
+
+; pest colonisation for cropsRequiringCBC only
+to pestColonization
+  
+  let nbCropsColonisedPerTick floor (pcr / 100 * count cropsRequiringCBC)
+  
+  ifelse count cropsRequiringCBC with [state = 0] > nbCropsColonisedPerTick[
+    ask n-of nbCropsColonisedPerTick cropsRequiringCBC with [state = 0] [
+      set state 1
+      set d1 d
+      set pcolor 19]][
+    ask cropsRequiringCBC with [state = 0] [
+      set state 1
+      set d1 d
+      set pcolor 19]
+  ]
+end
+
+to updatePatches
+  ask cropPatches with [state = 1 and (d - d1) >= state1_to_2][set pcolor 16]
+  ask cropPatches with [state = 2 and (d - d2) = state2_to_3][set state 3 set pcolor 85]
+  ask cropPatches with [state = 3 and (d - d2) = state3_to_4][
+    set state 4
+    set pcolor 25
+    sprout-adults repro_rate [
+      set birthyear y
+      set emergenceDate d
+      set size 0.5
+      set color 0]]
+end
+
+to adultMove 
+  
+  ; movement
+  if dispersal_behaviour = "random" [move-to one-of patches in-radius distDispersalAdults]
+  if dispersal_behaviour = "oriented" [orientedMovement]
+  
+  ; if the adult moves on a crop patch with pests and free of enemies, stop and update the patch [condition for latent period = 7 days => (d - [d1] of patch-here) >= 7 ?]
+  ifelse [free?] of patch-here = TRUE and [state] of patch-here = 1 and d - [d1] of patch-here >= state1_to_2 [
+    ask patch-here [
+      set free? FALSE 
+      set state 2 
+      set pcolor 13
+      set d2 d]
+    set move? FALSE]
+  [set move? TRUE]
+end
+
+
+
+;;; adult move in 1.5 radius towards the cropPatch with more pests (= patch with the lowest d1)
+;;; if there is not such patch in radius 1.5 they can find a target patch in perception_range, and move in radius 1.5 towards this patch
+;;; if even in this perceptio_range there is not such patch, adult move randomly in 1.5 radius
+to orientedMovement
+  ifelse any? patches in-radius distDispersalAdults with [free? = TRUE and state = 1 and d - d1 >= state1_to_2] [
+    move-to min-one-of patches in-radius distDispersalAdults with [free? = TRUE and state = 1][d1]][
+    ifelse any? patches in-radius perception_range with [free? = TRUE and state = 1 and d - d1 >= state1_to_2] [
+      let target_patch min-one-of patches with [free? = TRUE and state = 1 and d - d1 >= state1_to_2][d1] ; distance myself
+      move-to min-one-of patches in-radius distDispersalAdults [distance target_patch]][
+      move-to one-of patches in-radius distDispersalAdults]]
+end
+
+to adultMortality
+  if random-float 1 < deltaAdults [die]
+end
+
+to adultBackSNH
+  
+  ;;; random dispersal
+  ;if dispersal_behaviour = "random" [move-to one-of patches in-radius distDispersalAdults]
+  
+  ;;; oriented dispersal
+  ;if dispersal_behaviour = "oriented" [
+  
+    ; choose directional-patch
+    let closestSNHPatch patch [xClosestSNH] of patch-here [yClosestSNH] of patch-here
+  
+    ; choose arrival-patch
+    let arrivalPatch min-one-of patches in-radius distDispersalAdults [distance closestSNHPatch]
+    
+    ; adult-predator agent moves to arrival-patch
+    face arrivalPatch
+    move-to arrivalPatch
+  
+    ; update move
+    if [landCover] of patch-here = 1 [set move? FALSE]
+  ;]
+  
+end

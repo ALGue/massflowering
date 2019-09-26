@@ -1,0 +1,267 @@
+to pollGo
+  ask foragers [set lifespan (lifespan + 1)]
+
+  ; phenology
+  phenology
+
+  ; foraging + pollination + back to nest
+  ; foraging
+  ;show "test1"
+  foragingDispersal-test 
+
+  ; reproduction foragers -> broods
+  ;show "testPoll"
+  dropPollen
+
+  ; mortality for foragers
+  ;show "testmortality"
+  mortality
+
+  ; emergence step1: broods -> foragers
+  ; emergenceStep1
+
+  ; emergence step2: foragers -> dispersal in the landscape to find a nesting patch
+  ; emergenceStep2
+  ; emergingDispersal-test ; ; -> 05_07_3 ; broods -> foragers + foragers -> dispersal in the landscape to find a nesting patch
+  emergingDispersal ; -> 05_07_4
+  ; we consider here that all foragers have the same emergence date => to change if it is no longer the case
+  if d = s1 [  
+  ; total foragers after emergence
+  set totalForagersAfterEmergence count foragers]
+  
+  
+  ; show pollinated crops
+  showPollination
+
+  ; save outputs
+  ;save
+end
+
+;;;;;
+
+to phenology
+  ask patches with [d >= t AND d <= (t + l)][set f 1]
+  ask patches with [d < t OR d > t + l][set f 0]
+end
+
+;to foraging
+;  ask foragers[
+;    let distDispersal ceiling (r:get (word "rexp(1," nu ")")) ; dispersal distance => test if it exceeds the landscape area (no patches to this distance)
+;    ifelse count patches with [distance myself = round distDispersal] != 0 [
+;      ; foraging
+;      let arrivalPatch one-of patches with [distance myself = round distDispersal]
+;      move-to arrivalPatch
+;      ; pollination
+;      if [f] of patch-here = 1 AND [p] of patch-here = 0 [
+;        takePollen
+;        pollinate]]
+;    [
+;      ; foraging
+;      let arrivalPatch one-of patches in-radius distDispersal
+;      move-to arrivalPatch
+;      ; pollination
+;      if [f] of patch-here = 1 AND [p] of patch-here = 0 [
+;        takePollen
+;        pollinate]]
+;    move-to myNest
+;  ]
+;end
+
+
+
+
+;to pollinate
+;  ask patch-here [set p (p + 0.5)]
+;end
+
+to dropPollen
+  ask foragers with [brood? = 1][
+    let qPollenDropped qPollenCollected 
+    ask myNest [ set currentStockPollen (currentStockPollen + qPollenDropped) ]
+    set brood? 0
+    set qPollenCollected 0]
+end
+
+
+
+to mortality
+  ask foragers [
+    if random-float 1 < deltaForagers [
+      ask patch-here [set nForagers nForagers - 1]
+      ;saveLifespan
+      die]]
+end
+
+;to emergenceStep1 ; broods become foragers
+;  ask broods with [emergenceDate = d][
+;    ask patch-here [
+;      sprout-foragers 1 [
+;        set color 45
+;        set lifespan 0]
+;      set nBroods (nBroods - 1)
+;      set nForagers (nForagers + 1)]
+;    die]
+;end
+
+;to emergenceStep2 ; dispersal of foragers in order to establish a nest
+;  ask foragers with [lifespan = 0][
+;    move-to patch-here ; go to patch center
+;    ask patch-here [set nForagers (nForagers - 1)]
+;    ; dispersal for nesting patch
+;    let distDispersal ceiling (r:get (word "rexp(1," nu ")")) ; dispersal distance => test if it exceeds the whole landscape area (no patches to the dist)
+;    ifelse count patches with [distance myself = round distDispersal] != 0 [
+;      ; dispersal
+;      let arrivalPatch one-of patches with [distance myself = round distDispersal]
+;      move-to arrivalPatch
+;      ; establishment in the patch for nesting?
+;      ifelse [landCover] of arrivalPatch = 0 [die][set myNest patch-here ask patch-here [set nForagers nForagers + 1]]]
+;    [
+;      ; dispersal
+;      let arrivalPatch one-of patches in-radius distDispersal
+;      move-to arrivalPatch
+;      ; establishment in the patch for nesting?
+;      ifelse [landCover] of arrivalPatch = 0 [die][set myNest patch-here ask patch-here [set nForagers nForagers + 1]]]]
+;end
+
+to showPollination
+  ask cropPatches with [p = 0][set pcolor 9.9]
+  ask cropPatches with [p = 1][set pcolor 46]
+end
+
+;to foragingDispersal
+;  
+;  ask foragers[
+;  
+;    ; select a random distance - logistic law
+;    ;let distDispersal r:get (word "ceiling(abs(rlogis(1, location = 1, scale = 3)))")
+;    let distDispersal r:get (word "ceiling(abs(rlogis(1, location = 1, scale = " scaleDispersal ")))")
+;    
+;  
+;    ; ifelse 1 crops with flowering period = TRUE at this distance -> move-to it, otherwise -> move-to a random patch at this distance
+;    ifelse count patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1) and landCover = 0 and f = 1] > 0[
+;      move-to one-of patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1) and landCover = 0 and f = 1]][
+;      ; in case of the random distance > landscape limits (otherwise bugs)
+;      ifelse count patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1)] != 0 [
+;        move-to one-of patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1)]][
+;        move-to max-one-of patches [distance myself]]]
+;    
+;    ; take pollen + pollination
+;    if [f] of patch-here = 1 AND [p] of patch-here < 1 [
+;        takePollen
+;        pollinate]
+;    
+;    ; back to the nest
+;    move-to myNest]
+;  
+;end
+
+
+to foragingDispersal-test
+  
+  ask foragers[
+    
+    set totFlights totFlights + 1
+  
+    ; select a random distance - logistic law
+    ; let distDispersal r:get (word "ceiling(abs(rlogis(1, location = 1, scale = " scaleDispersal ")))")
+    let randomVal log (1 / (random-float 1) - 1) 10
+    ; let distDispersal ceiling (1 + abs(scaleDispersal * randomVal))
+    let distDispersal ceiling (abs(scaleDispersal * randomVal))
+    
+    let patchesInRadius patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1)]
+    
+    ;ifelse any? patchesInRadius with [landCover = 0 and f = 1 and cropId = "A"] ; ici modif cropId
+    ; test condition requirements
+    ifelse any? patchesInRadius with [landCover = 0 and f = 1 and member? myself cropsRequiringPollination] ; ici modif cropId
+    [let myCropDestination one-of patchesInRadius with [landCover = 0 and f = 1]
+      set myCropDestination-x [pxcor] of myCropDestination
+      set myCropDestination-y [pycor] of myCropDestination]
+    [ifelse count patchesInRadius > 0 [
+      let myCropDestination one-of patchesInRadius
+      set myCropDestination-x [pxcor] of myCropDestination
+      set myCropDestination-y [pycor] of myCropDestination]
+      [
+        let myCropDestination max-one-of cropPatches [distance myself]
+        set myCropDestination-x [pxcor] of myCropDestination
+        set myCropDestination-y [pycor] of myCropDestination]]
+       
+    ; take pollen + pollination
+    ;if [f] of patch myCropDestination-x myCropDestination-y = 1 
+    ;AND [p] of patch myCropDestination-x myCropDestination-y < 1 
+    ;AND [cropId] of patch myCropDestination-x myCropDestination-y = "A" ; ici modif cropId 
+    ; test condition requirements
+    if [f] of patch myCropDestination-x myCropDestination-y = 1 
+    AND [p] of patch myCropDestination-x myCropDestination-y < 1 
+    AND member? patch myCropDestination-x myCropDestination-y cropsRequiringPollination = TRUE ; ici modif cropId 
+    [ 
+        
+      ; takePollen
+      set brood? 1 
+      if [currentStockPollen] of patch myCropDestination-x myCropDestination-y > 0 [
+        set qPollenCollected (([maxPollen] of patch myCropDestination-x myCropDestination-y) / nbVisitsToDepletePollen)
+        let varStockPollen [currentStockPollen] of patch myCropDestination-x myCropDestination-y
+        let varMaxPollen [maxPollen] of patch myCropDestination-x myCropDestination-y
+        ask patch myCropDestination-x myCropDestination-y [set currentStockPollen  (varStockPollen - varMaxPollen / nbVisitsToDepletePollen)]]
+      
+      ; pollinate
+      ask patch myCropDestination-x myCropDestination-y [set p (p + 1 / nbVisitsToDepletePollen)]
+    ]
+  ]
+  
+end
+
+
+to emergingDispersal-test
+  
+  ; broods become foragers
+  ask broods with [emergenceDate = d][
+    ask patch-here [
+      sprout-foragers 1 [
+        set color 45
+        set lifespan 0]
+      set nBroods (nBroods - 1)
+      set nForagers (nForagers + 1)]
+    die]
+  
+  ask foragers with [lifespan = 0][
+    set myNest patch-here ]
+  
+end
+
+
+to emergingDispersal
+  
+  ; broods become foragers
+  ask broods with [emergenceDate = d][
+    ask patch-here [
+      sprout-foragers 1 [
+        set color 45
+        set lifespan 0]
+      set nBroods (nBroods - 1)
+      set nForagers (nForagers + 1)]
+    die]
+  
+  ; dispersal of new foragers to establish a nest
+  ask foragers with [lifespan = 0][
+    
+    ; move-to patch center and update
+    move-to patch-here
+    ask patch-here [set nForagers (nForagers - 1)]
+    
+    ; select a random distance - logistic law
+    ;let distDispersal r:get (word "ceiling(abs(rlogis(1, location = 1, scale = 3)))")
+    ;let distDispersal r:get (word "ceiling(abs(rlogis(1, location = 1, scale = " scaleDispersal "))) - 1")
+    let randomVal log (1 / (random-float 1) - 1) 10
+    let distDispersal ceiling (1 + abs(3 * randomVal))
+    
+    ; ifelse 1 snh at this distance -> move-to it, otherwise -> move-to crops and die (no nest establishment in crops)
+    ; ifelse [landCover = 1] of one-of patches with [distance myself >= distDispersal and distance myself < (distDispersal + 1)][
+    ifelse count patches with [landCover = 1 and distance myself >= distDispersal and distance myself < (distDispersal + 1)] > 0[
+      move-to one-of patches with [landCover = 1 and distance myself >= distDispersal and distance myself < (distDispersal + 1)]
+      ; update nest and patch-here
+      set myNest patch-here 
+      ask patch-here [set nForagers nForagers + 1]][
+      die]]
+
+
+end

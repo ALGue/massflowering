@@ -1,0 +1,318 @@
+globals 
+[
+  ;targetForAgregation
+  accuracyThreshold
+  maxPermutations
+  
+  averageGreenGreenNeighbors
+  nbPermutationsToTargetAgregation
+  
+  ;nbPatchesInClusters ; var for alternative = nb de patchs voulu dans un cluster
+  totalClusters
+  
+  varLabelClusterGrowth
+  
+  ; test
+  varianceGreenGreenNeighbors
+  
+  listCropIdProportion
+  listCropIdNb ; nb of patches for each cropId
+  
+  ; counter
+]
+
+; initiate a landscape grid according to the parameters of composition (number-of-SNH-patches) and configuration (target-for-agregation)
+; change value of land-cover to do it
+; when the design is stable, identify SNH clusters and compute the proximity of every patch of the grid to the closer cluster
+
+to landscape
+  
+  set accuracyThreshold 0.1
+  set maxPermutations 1500
+  
+  ; presence of SNH patches ?
+  ifelse snh > 0
+  [
+  
+    ; random landCover landscape, according to 'number-of-SNH-patches'
+    ask patches [set landCover 0]
+    ask n-of round (snh / 100 * count (patches)) patches [set landCover 1]
+  
+    ; landCover permutations to find a configuration close to 'target-of-agregation'
+  
+    set averageGreenGreenNeighbors mean [count neighbors4 with [landCover = 1 ]] of patches with [landCover = 1] ; while-loop fits 'average-green-green-neighbors' with 'target-of-agregation'
+    
+    ; test
+    ;set varianceGreenGreenNeighbors variance [count neighbors4 with [landCover = 0 ]] of patches with [landCover = 0]
+    
+    set nbPermutationsToTargetAgregation 0
+  
+    while [(abs(averageGreenGreenNeighbors - targetForAgregation) > accuracyThreshold) = TRUE AND (nbPermutationsToTargetAgregation < maxPermutations) = TRUE]
+    [
+      ;show averageGreenGreenNeighbors
+    
+      set nbPermutationsToTargetAgregation nbPermutationsToTargetAgregation + 1
+    
+      ;show nbPermutationsToTargetAgregation
+    
+      set averageGreenGreenNeighbors mean [count neighbors with [landCover = 1]] of patches with [landCover = 1]
+      
+      ; test
+      ;set varianceGreenGreenNeighbors variance [count neighbors4 with [landCover = 0 ]] of patches with [landCover = 0]
+    
+      ifelse averageGreenGreenNeighbors < targetForAgregation
+      [
+        ask one-of patches with [landCover = 1]
+        [ 
+          let N count neighbors with [landCover = 1]
+          let moreGreenNeighborsThanMe patches with [landCover = 1 and self != myself and (member? self [neighbors] of myself = false )] with [count neighbors with [landCover = 1] >= N and count neighbors with [landCover = 1] < count neighbors]
+          ;show more-green-neighbors-than-me
+          if count moreGreenNeighborsThanMe > 0 
+          [
+            ask one-of moreGreenNeighborsThanMe 
+            [
+              ask one-of neighbors with [landCover = 0] [set landCover 1]
+              ask myself [set landCover 0]
+            ]
+          ]
+        ]
+      ]
+      ; ifelse 2nd brackets
+      [ 
+        ask one-of patches with [landCover = 1]
+        [ 
+          let N count neighbors with [ landCover = 1 ]
+          let lessGreenNeighborsThanMe patches with [landCover = 0 and (member? self [neighbors] of myself = false )] with [count neighbors with [landCover = 1] < N and count neighbors with [landCover = 1] < count neighbors]
+          if count lessGreenNeighborsThanMe > 0 
+          [
+            ask one-of lessGreenNeighborsThanMe 
+            [
+              ask one-of neighbors with [landCover = 0] [set landCover 1]
+              ask myself [set landCover 0]
+            ]
+          ]
+        ]
+      ] ; end ifelse
+      
+      ;colorPatchesMethod ; color crop patches in yellow and SNH in green
+    
+    ] ; end while
+      
+    ; identify SNH clusters and label them
+    findClustersMethod
+  
+    ; for every crop patch, compute the distance (minimal nb of jumps) to the closest SNH patch
+    computationProximityWithSNHMethod
+    
+  ]
+  ; if proportion-of-SNH-patches = 0 => control
+  [
+    ;ask patches [set landCover 1]
+    ;colorPatchesMethod
+  ]
+  
+  
+  
+end
+
+
+;;; identify clusters and label them
+
+to findClustersMethod
+  
+  ask patches[set clusterSeed nobody] ; initially, patches have no clusters
+  
+  loop [
+    
+    ; pick a random patch that isn't in a cluster yet
+    let seed one-of patches with [clusterSeed = nobody]
+    
+    ; if we can't find one, then we're done!
+    if seed = nobody
+    [ 
+      showClustersMethod
+      stop 
+    ]
+    
+    ; otherwise, make the patch the "leader" of a new cluster, by assigning itself to its own cluster
+    ; then call grow-cluster to find the rest of the cluster
+    ask seed
+    [ 
+      set clusterSeed self
+      growClusterMethod 
+    ]
+    
+  ]
+  
+  display
+end
+
+to growClusterMethod 
+  ask neighbors4 with [(clusterSeed = nobody) and (landCover = [landCover] of myself)]
+  [ 
+    set clusterSeed [clusterSeed] of myself
+    growClusterMethod 
+  ]
+end
+
+to showClustersMethod ; once all the clusters have been found put numeric labels on them, so the user can see that the clusters were identified correctly
+  let counter 0
+  loop
+  [ 
+    ;; pick a random patch we haven't labeled yet
+    let rnp one-of patches with [clusterId = 0]
+    if rnp = nobody [ stop ]
+    
+    ;; give the same label to all patches in the chosen patch's cluster 
+    ask rnp [ask patches with [clusterSeed = [clusterSeed] of myself] [set clusterId counter]]
+    set counter counter + 1 
+  ]
+end
+
+to computationProximityWithSNHMethod
+
+  ; SNH patches give themselves their own coordinates and distances
+  ask patches with [landCover = 1]
+  [
+    set closestSNHDistance 0
+    set xClosestSNH [pxcor] of self
+    set yClosestSNH [pycor] of self
+  ]
+
+  ; SNH patches give to their crop neighbors : 1) closest-SNH-distance = 1, and 2) their own coordinates (= coordinates of the closer SNH)
+  ask patches with [landCover = 1]
+  [
+    let xClosestSNHStart pxcor
+    let yClosestSNHStart pycor
+    ask neighbors4
+    [
+      if landCover = 0
+      [
+        set closestSNHDistance 1
+        set xClosestSNH xClosestSNHStart
+        set yClosestSNH yClosestSNHStart
+      ]
+    ]
+  ]
+
+  ; updated crop patches ask their not updated crop neighbors and give them : 
+  ; 1) closer-SNH-distance of self + 1, 
+  ; and 2) their own coordinates (= coordinates of the closer SNH)
+  while [any? patches with [closestSNHDistance = 0 and landCover = 0]]
+  [
+    ask patches with [closestSNHDistance != 0]
+    [
+      ask neighbors4
+      [
+        if landCover = 0 and  closestSNHDistance = 0
+        [
+          set closestSNHDistance [closestSNHDistance + 1] of myself
+          set xClosestSNH [xClosestSNH] of myself
+          set yClosestSNH [yClosestSNH] of myself
+        ]
+      ]
+    ]
+  ]
+end
+
+to assignCropId
+        
+  set listCropIdProportion (list ratio_A/B (100 - ratio_A/B))
+  set listCropIdNb (list (ceiling (item 0 listCropIdProportion / 100 * stockCrops)) (stockCrops - ceiling (item 0 listCropIdProportion / 100 * stockCrops)))
+      
+  if configurationCrops = "random" [
+    ask n-of item 0 listCropIdNb cropPatches [set cropId "A"]
+    ask n-of item 1 listCropIdNb cropPatches with [cropId != "A"][set cropId "B"]]
+  
+;  if configurationCrops = "circle" [
+;    if snh > 0 [
+;      let firstagentset cropPatches with [any? neighbors4 with [landCover = 1]]
+;      ifelse item 0 listCropIdNb > count firstagentset [
+;        ask firstagentset [set cropId "A"]
+;        loop[
+;          if count cropPatches with [cropId = "A"] = item 0 listCropIdNb [
+;            ;ask n-of item 1 listCropIdNb cropPatches with [cropId != "A"] [set cropId "B"]
+;            ask cropPatches with [cropId != "A"] [set cropId "B"]
+;            show "test"
+;            stop]
+;          let agentset cropPatches with [cropId != "A" and any? neighbors4 with [landCover = 0 and cropId = "A"]]
+;          ifelse count agentset < (item 0 listCropIdNb - count cropPatches with [cropId = "A"]) [
+;            ask agentset [set cropId "A"]][
+;            ask n-of (item 0 listCropIdNb - count cropPatches with [cropId = "A"]) agentset [set cropId "A"]]]]
+;      [ask n-of item 0 listCropIdNb firstagentset [set cropId "A"]]]]
+  
+;  if configurationCrops = "circle" [
+;    if snh > 0 [
+;      while [count cropPatches with [cropId = "A"] < item 0 listCropIdNb] 
+;      [
+;        ifelse any? snhPatches with [any? neighbors4 with [landCover = 0 and cropId = 0]]  [
+;          ask one-of cropPatches with [cropId = 0 and any? neighbors4 with [landCover = 1]][set cropId "A"]] [
+;          ask one-of cropPatches with [cropId = 0 and any? neighbors4 with [cropId = "A"]][set cropId "A"]]
+;      ]
+;      ask cropPatches with  [cropId != "A"][set cropId "B"]
+;  ]]
+ 
+  if configurationCrops = "circle" [
+    if snh > 0 [
+      let firstagentset cropPatches with [any? neighbors4 with [landCover = 1]]
+      ifelse count firstagentset > item 0 listCropIdNb [
+        ask n-of item 0 listCropIdNb cropPatches with [any? neighbors4 with [landCover = 1]][set cropId "A"] 
+        ask cropPatches with [cropId != "A"][set cropId "B"]] 
+      [
+        ask firstagentset [set cropId "A"]
+        while [count cropPatches with [cropId = "A"] < item 0 listCropIdNb][
+          let neighborAgentSet cropPatches with [cropId != "A" and any? neighbors4 with [cropId = "A"]]
+          ifelse count neighborAgentSet + count cropPatches with [cropId = "A"] > item 0 listCropIdNb
+          [let test item 0 listCropIdNb - count cropPatches with [cropId = "A"]
+            ask max-n-of test neighborAgentSet [count neighbors4 with [cropId = "A"]][set cropId "A"]]
+          [ask neighborAgentSet [set cropId "A"]]
+        ]
+      ] ask cropPatches with [cropId != "A"][set cropId "B"]]]
+ 
+;    if configurationCrops = "square" [
+;    ifelse ratio_A/B != 0 and ratio_A/B != 100 [
+;      let counter 0
+;      let altCropId "A"
+;      ;;; grow squares randomly in cropPatches, with set length && width
+;      ;;; to do it, choose a seed patch and ask patches around him to change the cropId if they can (= if they have not yet a cropId)
+;      ;;; altern between squares with cropId "A" and "B" in order to avoid bias on the shape of the last squares
+;      while [count cropPatches with [cropId = 0] > 0] [
+;        ifelse counter mod 2 = 0 [set altCropId "A"][set altCropId "B"]
+;        let width_square square_side
+;        let lenght_square square_side
+;        let square_centre one-of cropPatches with [cropId = 0]
+;        ask cropPatches with  [cropId = 0 
+;          and width_square + [pxcor] of square_centre >= pxcor and pxcor >= [pxcor] of square_centre  
+;          and [pycor] of square_centre  >= pycor and pycor >= ([pycor] of square_centre  - lenght_square) ] 
+;        [set cropId  altCropId]
+;        set counter counter + 1 
+;      ]
+;    
+;      ;;; restore proportions for cropId "A" and "B"
+;      ;;; ask patches with the cropId in excess to convert to the other cropId
+;      ;;; in order to keep consistency about the square shape, ask patches close to patches with the new cropId   
+;      while [count cropPatches with [cropId = "A"] != item 0 listCropIdNb]
+;      [ifelse count cropPatches with [cropId = "A"] >= item 0 listCropIdNb
+;        [ifelse any? cropPatches with [cropId = "A" and any? neighbors4 with [cropId = "B"] = TRUE]
+;          [ ask one-of cropPatches with [cropId = "A" and any? neighbors4 with [cropId = "B"] = TRUE][set cropId "B"]]
+;          [ ask one-of cropPatches with [cropId = "A"][set cropId "B"]]]
+;        [ifelse any? cropPatches with [cropId = "B" and any? neighbors4 with [cropId = "A"] = TRUE]
+;          [ask one-of cropPatches with [cropId = "B" and any? neighbors4 with [cropId = "A"] = TRUE][set cropId "A"]]
+;          [ask one-of cropPatches with [cropId = "B"][set cropId "A"]]]]]
+;    [
+;      if ratio_A/B = 0 [ask cropPatches [set cropId "B"]]
+;      if ratio_A/B = 100 [ask cropPatches [set cropId "A"]]]
+;  ]
+  
+  if configurationCrops = "square" [
+    ifelse ratio_A/B != 0 and ratio_A/B != 100 [][
+      if ratio_A/B = 0 [ask cropPatches [set cropId "B"]]
+      if ratio_A/B = 100 [ask cropPatches [set cropId "A"]]]]
+
+end
+
+; respecter proportions
+; taille carrés
+
+
+

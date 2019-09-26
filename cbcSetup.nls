@@ -1,0 +1,51 @@
+globals[
+  distDispersalAdults 
+  ;deltaAdults
+  state1_to_2 
+  state2_to_3 
+  state3_to_4]
+
+to cbcSetup
+  
+  ; parameter initialization
+  ; set deltaAdults 0.06 ; 0.1 ; mortality during movement
+  set distDispersalAdults 1.5 ; radius for dispersal
+  set state1_to_2 7 ; pests are no detectable
+  set state2_to_3 7 ; time for laying juveniles
+  set state3_to_4 28 ; time length for juveniles converting to adults
+  
+  ; patches initialization
+  ask patches [
+  set free? TRUE
+  set state 0
+  set d1 s
+  set d2 s]
+  
+  ask cropsA[set myPollinationDependence 0.8]
+  
+  ; adult initialization
+  set i 0
+  if snh > 0 [
+    if %adults > 0 [
+      loop [
+        set i i + 1
+        ask one-of snhPatches[
+          sprout-adults 1 [
+            set birthyear 1
+            set emergenceDate 1
+            set size 0.5
+            set color 0
+            set move? TRUE
+            set timer_move 0]]
+        if i = round((1089 - stockCrops) * (%adults / 100)) [stop] ]]]
+
+;  ask one-of patches with [landCover = 1][
+;          sprout-adults 1 [
+;            set birthyear 1
+;            set emergenceDate 1
+;            set size 0.5
+;            set color 0
+;            set move? TRUE
+;            set timer_move 0]]
+end
+
